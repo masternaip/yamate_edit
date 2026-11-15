@@ -14,16 +14,20 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # para hindi lumabas ang t
 logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-PORT = int(os.environ.get("PORT", 5000))
+PORT = int(os.environ.get("PORT", 10000))
 RENDER_URL = os.getenv("RENDER_URL")  # hal. https://pangalan-mo.onrender.com (walang / sa dulo)
 
 # Hiwalay na secret path para hindi na nasa URL ang mismong token
 WEBHOOK_PATH = hashlib.sha256(TOKEN.encode()).hexdigest()[:32]
 
-# --- KONEKSIYON SA VYCE AI (async para hindi harangan ang event loop) ---
+# Mga model na susubukan, nang isa-isa, hanggang may sumagot
+MODELS = ["qwen3.8-27b", "glm-5.3-flash"]
+
+# --- KONEKSIYON SA VYCE AI (walang auto-retry para hindi mag-freeze) ---
 vyce_client = AsyncOpenAI(
     api_key=os.getenv("VYCE_API_KEY"),
     base_url="https://vyceai.com/v1",
+    max_retries=0,
 )
 
 app_flask = Flask(__name__)
@@ -60,17 +64,27 @@ async def cmd_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text("🤖 Nag-iisip ang Vyce AI...")
-    try:
-        response = await vyce_client.chat.completions.create(
-            model="qwen3.8-27b",  # Libre at mabilis. Palitan kung mawala sa Vyce Models page
-            messages=[{"role": "user", "content": user_prompt}],
-            timeout=30,
-        )
-        ai_reply = response.choices[0].message.content
-        await update.message.reply_text(ai_reply)
-    except Exception as e:
-        logger.exception("AI command failed")
-        await update.message.reply_text(f"❌ Vyce AI Error: {str(e)[:500]}")
+
+    last_error = None
+    for model in MODELS:
+        try:
+            response = await vyce_client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": user_prompt}],
+                timeout=45,
+            )
+            ai_reply = response.choices[0].message.content
+            if not ai_reply:
+                raise ValueError("Walang laman ang sagot ng AI")
+            await update.message.reply_text(ai_reply)
+            return
+        except Exception as e:
+            last_error = e
+            logger.warning("Nabigo ang model %s: %s", model, e)
+
+    await update.message.reply_text(
+        f"❌ Hindi sumagot ang Vyce AI ngayon. Subukan ulit mamaya.\n\nDetalye: {str(last_error)[:300]}"
+    )
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -126,4 +140,4 @@ def webhook():
 
 
 if __name__ == "__main__":
-    app_flask.run(host="0.0.0.0", port=PORT)
+    app_flask.run(host="0.0.0.0", port=PORT, threaded=True)
