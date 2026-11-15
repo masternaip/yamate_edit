@@ -11,6 +11,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)  # para hindi lumabas ang token sa logs
+logging.getLogger("httpx2").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -21,7 +22,7 @@ RENDER_URL = os.getenv("RENDER_URL")  # hal. https://pangalan-mo.onrender.com (w
 WEBHOOK_PATH = hashlib.sha256(TOKEN.encode()).hexdigest()[:32]
 
 # Mga model na susubukan, nang isa-isa, hanggang may sumagot
-MODELS = ["qwen3.8-27b", "glm-5.3-flash"]
+MODELS = ["glm-5.3-flash", "qwen3.8-27b"]
 
 # --- KONEKSIYON SA VYCE AI (walang auto-retry para hindi mag-freeze) ---
 vyce_client = AsyncOpenAI(
@@ -63,7 +64,7 @@ async def cmd_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    await update.message.reply_text("🤖 Nag-iisip ang Vyce AI...")
+    await update.message.reply_text("🤖 Nag-iisip ang Vyce AI... (maaaring abutin ng 30-60 segundo)")
 
     last_error = None
     for model in MODELS:
@@ -71,7 +72,7 @@ async def cmd_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response = await vyce_client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": user_prompt}],
-                timeout=45,
+                timeout=60,
             )
             ai_reply = response.choices[0].message.content
             if not ai_reply:
