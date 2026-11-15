@@ -18,7 +18,7 @@ RENDER_URL = os.getenv("RENDER_URL")  # hal. https://pangalan-mo.onrender.com (w
 # --- KONEKSIYON SA VYCE AI (async para hindi harangan ang event loop) ---
 vyce_client = AsyncOpenAI(
     api_key=os.getenv("VYCE_API_KEY"),
-    base_url="https://api.vyceai.com/v1",
+    base_url="https://vyceai.com/v1",
 )
 
 app_flask = Flask(__name__)
@@ -57,7 +57,7 @@ async def cmd_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Nag-iisip ang Vyce AI...")
     try:
         response = await vyce_client.chat.completions.create(
-            model="gpt-3.5-turbo",  # Palitan ng tamang model name sa Vyce AI dashboard mo
+            model="qwen3.8-27b",  # Libre at mabilis. Palitan kung mawala sa Vyce Models page
             messages=[{"role": "user", "content": user_prompt}],
             timeout=30,
         )
