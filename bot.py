@@ -13,7 +13,7 @@ VYCE_API_KEY = os.getenv("VYCE_API_KEY")
 
 app_flask = Flask(__name__)
 
-# I-initialize ang Telegram application
+# I-buildu ang Telegram application
 telegram_app = Application.builder().token(TOKEN).build()
 
 @app_flask.route("/")
@@ -57,39 +57,44 @@ async def cmd_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ May error sa koneksyon: {str(e)}")
 
-# I-register ang mga command handlers
+# I-register ang handlers
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("ai", cmd_ai))
 
+# Global initialization flag para sa Telegram app
+is_initialized = False
+
 @app_flask.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    """Sasalo ng updates mula sa Telegram at ligtas na ipapasa sa event loop"""
+    global is_initialized
     json_data = request.get_json(force=True)
     if not json_data:
         return "bad request", 400
 
     update = Update.de_json(json_data, telegram_app.bot)
     
-    # Ligtas na pamamahala ng event loop para hindi mag-crash o magsara
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-    except RuntimeError:
+    # Patakbuhin ang initialization at process_update sa loob ng isang ligtas na background task o thread
+    import threading
+
+    def run_in_background():
+        global is_initialized
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        
+        async def background_process():
+            if not is_initialized:
+                await telegram_app.initialize()
+                await telegram_app.start()
+                is_initialized = True
+            await telegram_app.process_update(update)
 
-    async def process():
-        if not telegram_app.running:
-            await telegram_app.initialize()
-            await telegram_app.start()
-        await telegram_app.process_update(update)
+        try:
+            loop.run_until_complete(background_process())
+        finally:
+            loop.close()
 
-    if loop.is_running():
-        asyncio.run_coroutine_threadsafe(process(), loop)
-    else:
-        loop.run_until_complete(process())
+    t = threading.Thread(target=run_in_background)
+    t.start()
 
     return "ok", 200
 
