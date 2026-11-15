@@ -12,6 +12,8 @@ RENDER_URL = os.getenv("RENDER_URL")
 VYCE_API_KEY = os.getenv("VYCE_API_KEY")
 
 app_flask = Flask(__name__)
+
+# I-initialize ang Telegram application
 telegram_app = Application.builder().token(TOKEN).build()
 
 @app_flask.route("/")
@@ -55,14 +57,20 @@ async def cmd_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ May error sa koneksyon: {str(e)}")
 
+# I-register ang mga command handlers
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("ai", cmd_ai))
 
 @app_flask.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    """Sasalo ng updates mula sa Telegram at ipapasa sa bot application nang hindi sumasara ang event loop"""
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+    """Sasalo ng updates mula sa Telegram at ligtas na ipapasa sa event loop"""
+    json_data = request.get_json(force=True)
+    if not json_data:
+        return "bad request", 400
+
+    update = Update.de_json(json_data, telegram_app.bot)
     
+    # Ligtas na pamamahala ng event loop para hindi mag-crash o magsara
     try:
         loop = asyncio.get_event_loop()
         if loop.is_closed():
@@ -83,7 +91,7 @@ def webhook():
     else:
         loop.run_until_complete(process())
 
-    return "ok", 200 
+    return "ok", 200
 
 if __name__ == "__main__":
     if RENDER_URL:
