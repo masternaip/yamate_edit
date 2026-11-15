@@ -1,4 +1,5 @@
 import os
+import hashlib
 import asyncio
 import threading
 import logging
@@ -9,11 +10,15 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)  # para hindi lumabas ang token sa logs
 logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 PORT = int(os.environ.get("PORT", 5000))
 RENDER_URL = os.getenv("RENDER_URL")  # hal. https://pangalan-mo.onrender.com (walang / sa dulo)
+
+# Hiwalay na secret path para hindi na nasa URL ang mismong token
+WEBHOOK_PATH = hashlib.sha256(TOKEN.encode()).hexdigest()[:32]
 
 # --- KONEKSIYON SA VYCE AI (async para hindi harangan ang event loop) ---
 vyce_client = AsyncOpenAI(
@@ -77,8 +82,8 @@ async def _startup():
     await telegram_app.initialize()
     await telegram_app.start()
     if RENDER_URL:
-        await telegram_app.bot.set_webhook(f"{RENDER_URL}/{TOKEN}")
-        logger.info("Webhook set: %s/<TOKEN>", RENDER_URL)
+        await telegram_app.bot.set_webhook(f"{RENDER_URL}/{WEBHOOK_PATH}")
+        logger.info("Webhook set: %s/<SECRET_PATH>", RENDER_URL)
 
 
 asyncio.run_coroutine_threadsafe(_startup(), loop).result(timeout=30)
@@ -90,7 +95,7 @@ def index():
     return "Bot is running and active!", 200
 
 
-@app_flask.route(f"/{TOKEN}", methods=["POST"])
+@app_flask.route(f"/{WEBHOOK_PATH}", methods=["POST"])
 def webhook():
     json_data = request.get_json(force=True, silent=True)
     if not json_data:
