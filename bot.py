@@ -12,11 +12,15 @@ RENDER_URL = os.getenv("RENDER_URL")
 # --- KONEKSIYON SA VYCE AI ---
 vyce_client = OpenAI(
     api_key=os.getenv("VYCE_API_KEY"),
-    base_url="https://api.vyceai.com/v1" # Siguraduhing ito ang tamang base URL sa docs nila
+    base_url="https://api.vyceai.com/v1"  # Siguraduhing ito ang tamang base URL sa docs nila
 )
 
 app_flask = Flask(__name__)
 telegram_app = Application.builder().token(TOKEN).build()
+
+@app_flask.route("/")
+def index():
+    return "Bot is running and active!", 200
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
@@ -36,7 +40,7 @@ async def cmd_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Nag-iisip ang Vyce AI...")
     try:
         response = vyce_client.chat.completions.create(
-            model="gpt-3.5-turbo", # Palitan ito ng tamang model name na nakalagay sa Vyce AI dashboard mo
+            model="gpt-3.5-turbo",  # Palitan ito ng tamang model name na nakalagay sa Vyce AI dashboard mo
             messages=[{"role": "user", "content": user_prompt}]
         )
         ai_reply = response.choices[0].message.content
