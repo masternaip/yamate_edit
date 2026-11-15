@@ -1,19 +1,14 @@
 import os
 import subprocess
+import requests
 from flask import Flask, request
-from openai import OpenAI  # Ginagamit para sa Vyce AI API
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 PORT = int(os.environ.get("PORT", 5000))
 RENDER_URL = os.getenv("RENDER_URL")
-
-# --- KONEKSIYON SA VYCE AI ---
-vyce_client = OpenAI(
-    api_key=os.getenv("VYCE_API_KEY"),
-    base_url="https://api.vyceai.com/v1"  # Siguraduhing ito ang tamang base URL sa docs nila
-)
+VYCE_API_KEY = os.getenv("VYCE_API_KEY")
 
 app_flask = Flask(__name__)
 telegram_app = Application.builder().token(TOKEN).build()
@@ -30,7 +25,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# Command para tawagin ang Vyce AI (halimbawa: /ai gawan mo ako ng caption para sa TikTok)
+# Command para tawagin ang Vyce AI gamit ang direktang HTTP request
 async def cmd_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_prompt = " ".join(context.args)
     if not user_prompt:
@@ -39,14 +34,27 @@ async def cmd_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     await update.message.reply_text("🤖 Nag-iisip ang Vyce AI...")
     try:
-        response = vyce_client.chat.completions.create(
-            model="gpt-3.5-turbo",  # Palitan ito ng tamang model name na nakalagay sa Vyce AI dashboard mo
-            messages=[{"role": "user", "content": user_prompt}]
-        )
-        ai_reply = response.choices[0].message.content
-        await update.message.reply_text(ai_reply)
+        headers = {
+            "Authorization": f"Bearer {VYCE_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-3.5-turbo",
+            "messages": [{"role": "user", "content": user_prompt}]
+        }
+        
+        # Direktang tawag sa Vyce AI API endpoint
+        response = requests.post("https://api.vyceai.com/v1/chat/completions", json=payload, headers=headers, timeout=30)
+        
+        if response.status_code == 200:
+            res_data = response.json()
+            ai_reply = res_data["choices"][0]["message"]["content"]
+            await update.message.reply_text(ai_reply)
+        else:
+            await update.message.reply_text(f"❌ Vyce AI Error ({response.status_code}): {response.text}")
+            
     except Exception as e:
-        await update.message.reply_text(f"❌ May error sa Vyce AI: {str(e)}")
+        await update.message.reply_text(f"❌ May error sa koneksyon: {str(e)}")
 
 # (Dito nakalagay ang iba pang video/trim handlers mo...)
 
@@ -70,7 +78,6 @@ def webhook():
     return "ok", 200 
 
 if __name__ == "__main__":
-    import requests
     if RENDER_URL:
         webhook_url = f"{RENDER_URL}/{TOKEN}"
         requests.get(f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={webhook_url}")
