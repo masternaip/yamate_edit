@@ -78,4 +78,15 @@ def webhook():
             await telegram_app.start()
         await telegram_app.process_update(update)
 
-    if loop.
+    if loop.is_running():
+        asyncio.run_coroutine_threadsafe(process(), loop)
+    else:
+        loop.run_until_complete(process())
+
+    return "ok", 200 
+
+if __name__ == "__main__":
+    if RENDER_URL:
+        webhook_url = f"{RENDER_URL}/{TOKEN}"
+        requests.get(f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={webhook_url}")
+    app_flask.run(host="0.0.0.0", port=PORT)
