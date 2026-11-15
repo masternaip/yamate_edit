@@ -73,8 +73,13 @@ async def cmd_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Vyce AI Error: {str(e)[:500]}")
 
 
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logger.error("Handler error: %s", context.error, exc_info=context.error)
+
+
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("ai", cmd_ai))
+telegram_app.add_error_handler(on_error)
 
 
 # ---------- I-initialize ang telegram app nang isang beses lang ----------
@@ -82,11 +87,23 @@ async def _startup():
     await telegram_app.initialize()
     await telegram_app.start()
     if RENDER_URL:
-        await telegram_app.bot.set_webhook(f"{RENDER_URL}/{WEBHOOK_PATH}")
+        await telegram_app.bot.set_webhook(
+            f"{RENDER_URL}/{WEBHOOK_PATH}",
+            drop_pending_updates=True,
+        )
         logger.info("Webhook set: %s/<SECRET_PATH>", RENDER_URL)
+    else:
+        logger.error("RENDER_URL ay wala! Hindi na-set ang webhook.")
 
 
 asyncio.run_coroutine_threadsafe(_startup(), loop).result(timeout=30)
+
+
+def _log_future_result(fut):
+    try:
+        fut.result()
+    except Exception:
+        logger.exception("Nabigo ang pagproseso ng update")
 
 
 # ---------- Flask routes ----------
@@ -101,8 +118,10 @@ def webhook():
     if not json_data:
         return "bad request", 400
 
+    logger.info("Update natanggap mula sa Telegram")
     update = Update.de_json(json_data, telegram_app.bot)
-    asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), loop)
+    fut = asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), loop)
+    fut.add_done_callback(_log_future_result)
     return "ok", 200
 
 
